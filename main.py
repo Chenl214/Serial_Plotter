@@ -94,14 +94,36 @@ class SerialPlotter:
             else:
                 # 否则选择第一个可用串口
                 self.port_var.set(ports[0] if ports else "")
-            
-            # 更新状态
-            self.status_var.set(f"已刷新串口列表，发现 {len(ports)} 个串口")
-            print(f"可用串口: {ports}")
-            
         except Exception as e:
-            self.status_var.set(f"刷新串口失败: {str(e)}")
-            print(f"刷新串口错误: {e}")
+            print(f"刷新串口列表时出错: {e}")
+
+    def clear_data(self):
+        """清除串口数据框文本内容(保留绘图数据)"""
+        print("清除数据方法被调用")  # 调试输出
+        try:
+            # 调试输出所有属性
+            print(f"对象属性: {dir(self)}")
+            
+            # 清除文本显示框内容
+            if hasattr(self, 'data_text'):
+                print("清除文本显示框")  # 调试输出
+                self.data_text.config(state='normal')
+                self.data_text.delete('1.0', tk.END)
+                self.data_text.config(state='disabled')
+                
+            # 重置数据缓冲区
+            if hasattr(self, 'data_buffer'):
+                print("清除数据缓冲区")  # 调试输出
+                self.data_buffer = []
+                
+            # 更新状态
+            self.status_var.set("文本数据已清除")
+                
+        except Exception as e:
+            print(f"清除数据时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            self.status_var.set(f"清除数据失败: {str(e)}")
     
     def update_status(self):
         """更新状态栏信息"""
@@ -184,6 +206,10 @@ class SerialPlotter:
                                      values=["9600", "19200", "38400", "57600", "115200"], width=15)
         self.baud_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
         self.baud_var.set("115200")
+
+        # 清除数据按钮
+        clear_btn = ttk.Button(port_frame, text="清除串口数据", command=self.clear_data)
+        clear_btn.grid(row=2, column=0, columnspan=2, pady=(10,0), sticky='ew')
         
         # 创建滚动条
         scrollbar = ttk.Scrollbar(data_frame)
@@ -219,8 +245,8 @@ class SerialPlotter:
         settings_frame = ttk.LabelFrame(main_frame, text=" 显示设置 ")
         settings_frame.pack(fill='x', pady=5)
         
-        ttk.Checkbutton(settings_frame, text="显示0轴", variable=self.zero_line_var).pack(side='left', padx=10)
-        ttk.Label(settings_frame, text="保留数据点(百):").pack(side='left', padx=5)
+        ttk.Checkbutton(settings_frame, text="以 0 轴为横轴", variable=self.zero_line_var).pack(side='left', padx=10)
+        ttk.Label(settings_frame, text="保留数据点数量(百):").pack(side='left', padx=5)
         self.data_points_entry = ttk.Entry(settings_frame, textvariable=self.data_points_var, width=5)
         self.data_points_entry.pack(side='left', padx=5)
         self.data_points_var.set(5)
