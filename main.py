@@ -23,20 +23,49 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import serial
-import threading
-import traceback  # 添加traceback模块
-from matplotlib.animation import FuncAnimation
-import tkinter as tk
-from tkinter import ttk, simpledialog, messagebox
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # 添加Tkinter后端支持
-import numpy as np
-
 import serial.tools.list_ports
-import matplotlib.pyplot as plt
+import threading
 import time
+import traceback
+import tkinter as tk
+import numpy as np
+from tkinter import ttk, messagebox
+from matplotlib.animation import FuncAnimation
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
 
 class SerialPlotter:
+    """
+    串口数据实时绘图器
+    
+    主要功能：
+    - 通过串口实时接收数据
+    - 解析并显示多种参数的数据
+    - 提供实时绘图功能
+    - 支持暂停、继续、刷新等操作
+    
+    特性：
+    - 多线程数据读取
+    - 实时数据显示和绘图
+    - 数据统计和速率计算
+    - 响应式UI设计
+    """
     def __init__(self):
+        """
+        初始化串口绘图器
+        
+        初始化内容：
+        - 创建主窗口和UI控件
+        - 初始化串口连接参数
+        - 设置数据存储结构
+        - 配置Matplotlib绘图区域
+        
+        重要实例变量：
+        - self.serial_port: 串口连接对象
+        - self.data: 存储接收数据的字典
+        - self.fig, self.ax: Matplotlib图形和坐标轴
+        - self.lines: 各参数的绘图线对象
+        """
         self.ser = None
         self.running = False
         self.data_dict = {}
@@ -253,16 +282,46 @@ class SerialPlotter:
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(pady=10)
         
-        self.start_btn = ttk.Button(btn_frame, text="开始", command=self.start)
+        # 创建控制按钮组
+        # 开始按钮 - 启动串口数据监测
+        # 初始状态: 启用
+        self.start_btn = ttk.Button(
+            btn_frame,
+            text="开始",
+            command=self.start
+        )
         self.start_btn.pack(side='left', padx=5)
         
-        self.stop_btn = ttk.Button(btn_frame, text="停止", command=self.stop, state="disabled")
+        # 停止按钮 - 停止串口数据监测
+        # 初始状态: 禁用 (启动后启用)
+        self.stop_btn = ttk.Button(
+            btn_frame,
+            text="停止", 
+            command=self.stop,
+            state="disabled"
+        )
         self.stop_btn.pack(side='left', padx=5)
         
-        self.pause_btn = ttk.Button(btn_frame, text="暂停", command=self.toggle_pause, state="disabled")
+        # 暂停按钮 - 暂停/继续数据监测
+        # 初始状态: 禁用 (启动后启用)
+        # 点击切换暂停/继续状态
+        self.pause_btn = ttk.Button(
+            btn_frame,
+            text="暂停",
+            command=self.toggle_pause,
+            state="disabled"
+        )
         self.pause_btn.pack(side='left', padx=5)
         
-        self.refresh_btn = ttk.Button(btn_frame, text="刷新", command=self.refresh_data, state="disabled")
+        # 刷新按钮 - 手动刷新数据
+        # 初始状态: 禁用 (启动后启用)
+        # 点击强制刷新当前数据
+        self.refresh_btn = ttk.Button(
+            btn_frame,
+            text="刷新",
+            command=self.refresh_data,
+            state="disabled"
+        )
         self.refresh_btn.pack(side='left', padx=5)
         
         # 添加状态栏
@@ -278,6 +337,29 @@ class SerialPlotter:
         data_rate_label.pack(side='right')
 
     def start(self):
+        """
+        启动串口数据监测
+        
+        功能：
+        - 根据用户选择的端口和参数建立串口连接
+        - 初始化数据存储结构
+        - 创建并显示实时绘图窗口
+        - 启动串口数据读取线程
+        
+        参数处理：
+        - 检查串口和参数是否已填写
+        - 验证波特率设置
+        
+        异常处理：
+        - 处理串口连接失败情况
+        - 捕获并显示数据解析错误
+        - 处理线程启动问题
+        
+        状态管理：
+        - 更新UI按钮状态
+        - 设置运行标志
+        - 初始化数据统计
+        """
         port = self.port_var.get()
         baud = int(self.baud_var.get())
         params = self.param_entry.get().strip()
@@ -367,6 +449,26 @@ class SerialPlotter:
             self.pause_btn.config(state="disabled")
 
     def stop(self):
+        """
+        停止串口数据监测
+        
+        功能：
+        - 关闭串口连接
+        - 停止数据读取线程
+        - 清理绘图资源
+        - 重置数据存储
+        
+        清理过程：
+        - 等待线程正常结束
+        - 关闭串口连接
+        - 停止动画更新
+        - 移除绘图窗口
+        
+        状态管理：
+        - 更新UI按钮状态
+        - 清除运行标志
+        - 重置数据统计
+        """
         self.running = False
         
         # 等待串口线程结束
@@ -880,6 +982,27 @@ class SerialPlotter:
         print("数据已刷新，重新开始计数")
 
     def toggle_pause(self):
+        """
+        切换暂停/继续数据监测状态
+        
+        功能：
+        - 暂停或恢复数据采集
+        - 控制绘图更新
+        - 管理数据缓冲区
+        
+        状态切换逻辑：
+        - 暂停时: 停止数据采集和绘图更新
+        - 恢复时: 继续数据采集和绘图更新
+        
+        UI状态管理：
+        - 更新暂停按钮文本
+        - 保持其他按钮状态
+        - 显示当前暂停状态
+        
+        异常处理：
+        - 处理线程暂停/恢复异常
+        - 捕获并显示状态切换错误
+        """
         # 添加线程安全的状态切换
         with self.pause_lock:
             self.paused = not self.paused
