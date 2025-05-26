@@ -128,9 +128,13 @@ class SerialPlotter:
         refresh_btn = ttk.Button(toolbar_frame, text="刷新串口", command=self.refresh_ports)
         refresh_btn.pack(side='right', padx=5)
 
+        # 创建顶部容器框架
+        top_frame = ttk.Frame(main_frame)
+        top_frame.pack(fill='x', pady=5)
+        
         # 串口设置区域
-        port_frame = ttk.LabelFrame(main_frame, text=" 串口设置 ")
-        port_frame.pack(fill='x', pady=5)
+        port_frame = ttk.LabelFrame(top_frame, text=" 串口设置 ")
+        port_frame.pack(side='left', padx=(0,5))
         
         # 串口选择
         ttk.Label(port_frame, text="串口:").grid(row=0, column=0, padx=5)
@@ -145,6 +149,32 @@ class SerialPlotter:
                                      values=["9600", "19200", "38400", "57600", "115200"], width=10)
         self.baud_combo.grid(row=0, column=3, padx=5)
         self.baud_var.set("115200")
+        
+        # 数据框区域（放在配置区右侧）
+        data_frame = ttk.LabelFrame(top_frame, text=" 串口数据 ")
+        data_frame.pack(side='right', fill='both', expand=True)
+        
+        # 创建滚动条
+        scrollbar = ttk.Scrollbar(data_frame)
+        scrollbar.pack(side='right', fill='y')
+        
+        # 创建文本框
+        self.data_text = tk.Text(
+            data_frame, 
+            yscrollcommand=scrollbar.set,
+            wrap='word',
+            state='disabled',
+            height=8,
+            width=40,
+            font=('Courier', 9)
+        )
+        self.data_text.pack(fill='both', expand=True)
+        scrollbar.config(command=self.data_text.yview)
+        
+        # 初始化数据缓冲区
+        self.data_buffer = []
+        self.max_buffer_lines = 1000
+        self.update_data_text("等待串口数据...")
 
         # 参数输入区域
         param_frame = ttk.LabelFrame(main_frame, text=" 监测参数 ")
@@ -229,8 +259,20 @@ class SerialPlotter:
             self.status_var.set(f"正在连接串口 {port}...")
             self.root.update_idletasks()
             
-            # 打开串口
-            self.ser = serial.Serial(port, baud, timeout=0.5)
+            # 打开串口并设置详细参数
+            print(f"正在打开串口: {port}, 波特率: {baud}")
+            self.ser = serial.Serial(
+                port=port,
+                baudrate=baud,
+                timeout=0.5,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE
+            )
+            
+            # 清空输入缓冲区
+            self.ser.reset_input_buffer()
+            print("串口已打开，输入缓冲区已清空")
             
             # 更新UI状态
             self.running = True
@@ -245,6 +287,7 @@ class SerialPlotter:
             # 启动串口读取线程
             self.thread = threading.Thread(target=self.read_serial, daemon=True)
             self.thread.start()
+            print(f"串口读取线程已启动，线程状态: {'运行中' if self.thread.is_alive() else '未启动'}")
             
             # 更新状态栏
             self.status_var.set(f"正在监测 - 串口:{port} 波特率:{baud}")
@@ -319,7 +362,73 @@ class SerialPlotter:
             except:
                 pass
                 
+        # 清理文本框资源
+        if hasattr(self, 'data_text'):
+            try:
+                self.data_text.destroy()
+            except:
+                pass
+                
+        # 清空数据缓冲区
+        if hasattr(self, 'data_buffer'):
+            self.data_buffer = []
+            
         self.root.destroy()
+
+    def update_data_text(self, line):
+        """更新数据文本框内容"""
+        try:
+            print(f"DEBUG: 准备更新文本框内容: {line}")  # 调试输出
+            # 确保在主线程中操作缓冲区
+            if threading.current_thread() is not threading.main_thread():
+                self.root.after(0, lambda: self._add_to_buffer(line))
+            else:
+                self._add_to_buffer(line)
+        except Exception as e:
+            print(f"更新文本框错误: {e}")
+
+    def _add_to_buffer(self, line):
+        """线程安全地添加数据到缓冲区"""
+        try:
+            self.data_buffer.append(line)
+            if len(self.data_buffer) > self.max_buffer_lines:
+                self.data_buffer.pop(0)
+            
+            # 立即更新UI
+            self._update_text_widget()
+        except Exception as e:
+            print(f"缓冲区更新错误: {e}")
+
+    def _update_text_widget(self):
+        """实际更新文本框内容"""
+        try:
+            if not hasattr(self, 'data_text') or not self.data_text.winfo_exists():
+                print("WARNING: 文本框不存在，无法更新")
+                return
+                
+            # 获取要显示的内容（最多100行）
+            display_content = '\n'.join(self.data_buffer[-100:])
+            print(f"DEBUG: 更新文本框内容，缓冲区大小: {len(self.data_buffer)}")
+            
+            # 在主线程中更新UI
+            def update_ui():
+                try:
+                    self.data_text.config(state='normal')
+                    self.data_text.delete(1.0, tk.END)
+                    self.data_text.insert(tk.END, display_content)
+                    self.data_text.config(state='disabled')
+                    self.data_text.see(tk.END)
+                    print("DEBUG: 文本框更新成功")
+                except Exception as e:
+                    print(f"UI更新错误: {e}")
+            
+            if threading.current_thread() is threading.main_thread():
+                update_ui()
+            else:
+                self.root.after(0, update_ui)
+                
+        except Exception as e:
+            print(f"更新文本框UI错误: {e}")
 
     def read_serial(self):
         buffer = ""
@@ -327,6 +436,25 @@ class SerialPlotter:
         last_report_time = time.time()
         
         print("串口读取线程已启动")
+        print(f"当前串口设置 - 端口: {self.port_var.get()}, 波特率: {self.baud_var.get()}")
+        
+        # 检查串口是否已打开
+        if not hasattr(self, 'ser') or not self.ser or not self.ser.is_open:
+            error_msg = "错误: 串口未正确初始化或未打开"
+            print(error_msg)
+            self.update_data_text(error_msg)
+            return
+            
+        # 检查文本框是否已初始化
+        if not hasattr(self, 'data_text'):
+            print("警告: 文本框未初始化")
+        
+        # 初始清空缓冲区
+        try:
+            self.ser.reset_input_buffer()
+            print("已清空串口输入缓冲区")
+        except Exception as e:
+            print(f"清空缓冲区错误: {e}")
         
         while self.running and self.ser and self.ser.is_open:
             with self.pause_lock:
@@ -335,73 +463,101 @@ class SerialPlotter:
                     continue
             
             try:
-                # 批量读取可用数据
-                if self.ser.in_waiting > 0:
-                    raw_data = self.ser.read(self.ser.in_waiting)
-                    buffer += raw_data.decode('utf-8', errors='ignore')
-                else:
-                    # 没有数据时短暂休眠，减少CPU占用
+                # 检查可读数据量
+                bytes_to_read = self.ser.in_waiting
+                if bytes_to_read == 0:
                     time.sleep(0.01)
                     continue
+                    
+                print(f"准备读取 {bytes_to_read} 字节数据")
                 
-                # 处理完整行
-                while '\n' in buffer:
-                    line, buffer = buffer.split('\n', 1)
-                    line = line.strip()
-                    if not line:
-                        continue
+                # 读取串口数据
+                raw_data = self.ser.read(bytes_to_read)
+                print(f"实际读取 {len(raw_data)} 字节原始数据")
+                
+                try:
+                    # 尝试多种编码格式解码
+                    encodings = ['utf-8', 'gbk', 'ascii', 'latin1']
+                    data = None
                     
-                    # 调试输出（每秒最多输出一次）
-                    current_time = time.time()
-                    if current_time - last_report_time > 1.0:
-                        print(f"接收数据: {line}")
-                        last_report_time = current_time
+                    for encoding in encodings:
+                        try:
+                            data = raw_data.decode(encoding)
+                            print(f"使用 {encoding} 解码成功")
+                            break
+                        except UnicodeDecodeError:
+                            continue
                     
-                    # 优化数据解析
-                    for param in self.selected_params:
-                        if f"{param}:" in line:
-                            try:
-                                # 提取数值部分
-                                value_part = line.split(f"{param}:")[1]
-                                # 去除单位符号并提取数值
-                                value_str = ''.join(c for c in value_part.split()[0] 
-                                                  if c.isdigit() or c in '.-')
-                                value = float(value_str)
-                                
-                                with self.lock:
-                                    if param not in self.data_dict:
-                                        self.data_dict[param] = []
-                                    self.data_dict[param].append(value)
-                                
-                                # 更新数据统计
-                                self.data_count += 1
-                                data_count += 1
-                                
-                                # 每100个数据点输出一次日志
-                                if data_count % 100 == 0:
-                                    print(f"已处理 {data_count} 个数据点")
-                                    
-                            except (ValueError, IndexError, AttributeError) as e:
-                                print(f"数据解析错误: {line} - {e}")
+                    if data is None:
+                        # 所有编码尝试失败，使用替换策略
+                        data = raw_data.decode('utf-8', errors='replace')
+                        print("警告: 使用替换策略解码数据")
+                    
+                    print(f"原始数据(hex): {raw_data.hex()}")
+                    print(f"解码后数据: {data[:50]}...")  # 只打印前50个字符
+                    
+                    if data:
+                        buffer += data
+                        data_count += len(data)
+                        
+                        # 处理完整行
+                        while '\n' in buffer:
+                            line, buffer = buffer.split('\n', 1)
+                            line = line.strip()
+                            if not line:
                                 continue
                                 
-            except serial.SerialException as e:
-                print(f"串口错误: {e}")
-                # 尝试重新连接
-                try:
-                    if self.ser:
-                        self.ser.close()
-                    time.sleep(1)
-                    self.ser = serial.Serial(self.port_var.get(), int(self.baud_var.get()), timeout=0.5)
-                    print("串口已重新连接")
-                except:
-                    print("重连失败，停止读取")
+                            # 过滤非可打印字符
+                            line = ''.join(c for c in line if c.isprintable() or c in '\t\r\n')
+                            print(f"处理行数据: {line}")
+                            
+                            # 更新文本框显示
+                            try:
+                                timestamp = time.strftime('%H:%M:%S', time.localtime())
+                                self.update_data_text(f"[{timestamp}] {line}")
+                            except Exception as e:
+                                print(f"串口数据显示错误: {e}")
+                            
+                            # 解析数据
+                            for param in self.selected_params:
+                                if f"{param}:" in line:
+                                    try:
+                                        # 提取数值部分
+                                        value_part = line.split(f"{param}:")[1]
+                                        # 去除单位符号并提取数值
+                                        value_str = ''.join(c for c in value_part.split()[0] 
+                                                          if c.isdigit() or c in '.-')
+                                        value = float(value_str)
+                                        
+                                        with self.lock:
+                                            if param not in self.data_dict:
+                                                self.data_dict[param] = []
+                                            self.data_dict[param].append(value)
+                                        
+                                        # 更新数据统计
+                                        self.data_count += 1
+                                        data_count += 1
+                                        
+                                    except (ValueError, IndexError, AttributeError) as e:
+                                        print(f"数据解析错误: {line} - {e}")
+                                        continue
+                                
+                except UnicodeDecodeError as decode_error:
+                    print(f"解码错误: {decode_error}")
+                    print(f"原始数据: {raw_data.hex()}")
+                    
+            except serial.SerialException as se:
+                print(f"串口通信错误: {se}")
+                if not self.ser.is_open:
+                    print("串口已关闭，尝试重新连接...")
                     self.stop()
                     break
+                time.sleep(0.1)
+                
             except Exception as e:
-                print(f"数据处理错误: {e}")
+                print(f"未知错误: {e}")
                 traceback.print_exc()
-                continue
+                time.sleep(0.1)
 
     # 图形样式优化
     def show_plot(self):
@@ -410,9 +566,50 @@ class SerialPlotter:
             if isinstance(widget, ttk.Frame) and widget != self.root.nametowidget('.!frame'):
                 widget.destroy()
                 
-        # 创建新的绘图框架
-        plot_frame = ttk.Frame(self.root)
-        plot_frame.pack(fill='both', expand=True, padx=5, pady=5)
+        # 创建主容器框架
+        main_plot_frame = ttk.Frame(self.root)
+        main_plot_frame.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        # 使用grid布局
+        main_plot_frame.grid_columnconfigure(0, weight=1)
+        main_plot_frame.grid_rowconfigure(0, weight=1)
+        
+        # 创建绘图框架
+        plot_frame = ttk.Frame(main_plot_frame)
+        plot_frame.grid(row=0, column=0, sticky='nsew')
+        
+        # 创建数据文本框框架（放在右上角）
+        text_frame = ttk.LabelFrame(plot_frame, text="串口数据")
+        text_frame.place(relx=0.98, rely=0.02, relwidth=0.3, anchor='ne')
+        
+        # 创建滚动条
+        scrollbar = ttk.Scrollbar(text_frame)
+        scrollbar.pack(side='right', fill='y')
+        
+        # 创建文本框（调整宽度和高度）
+        if not hasattr(self, 'data_text') or not self.data_text.winfo_exists():
+            self.data_text = tk.Text(
+                text_frame, 
+                yscrollcommand=scrollbar.set,
+                wrap='word',
+                state='disabled',
+                height=13,
+                width=18,
+                font=('Courier', 9)
+            )
+            # 靠右侧摆放，允许垂直扩展
+            self.data_text.pack(side='right', fill='both', expand=True)
+            scrollbar.pack(side='right', fill='y')
+            scrollbar.config(command=self.data_text.yview)
+            
+            # 初始化数据缓冲区
+            self.data_buffer = []
+            self.max_buffer_lines = 1000  # 最大保留行数
+            
+            # 添加初始提示信息
+            self._update_text_widget()  # 直接更新UI
+            self.update_data_text("等待串口数据...")
+            print("DEBUG: 文本框初始化完成")  # 调试输出
         
         # 设置绘图样式
         plt.style.use('ggplot')
