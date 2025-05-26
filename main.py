@@ -54,7 +54,6 @@ class SerialPlotter:
         # 初始化变量
         self.port_var = tk.StringVar()
         self.baud_var = tk.StringVar()
-        self.zero_line_var = tk.BooleanVar()
         self.data_points_var = tk.IntVar(value=5)
         self.paused = False
         self.pause_lock = threading.Lock()
@@ -245,7 +244,6 @@ class SerialPlotter:
         settings_frame = ttk.LabelFrame(main_frame, text=" 显示设置 ")
         settings_frame.pack(fill='x', pady=5)
         
-        ttk.Checkbutton(settings_frame, text="以 0 轴为横轴", variable=self.zero_line_var).pack(side='left', padx=10)
         ttk.Label(settings_frame, text="保留数据点数量(百):").pack(side='left', padx=5)
         self.data_points_entry = ttk.Entry(settings_frame, textvariable=self.data_points_var, width=5)
         self.data_points_entry.pack(side='left', padx=5)
@@ -706,10 +704,6 @@ class SerialPlotter:
         self.ax.set_xlim(0, 100)
         self.ax.set_ylim(-1, 1)
         
-        # 根据选项添加0轴
-        if self.zero_line_var.get():
-            self.ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-        
         # 设置窗口缩放支持
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
@@ -836,7 +830,7 @@ class SerialPlotter:
                     y_range = y_max - y_min
                     margin = y_range * 0.1 if y_range != 0 else 0.5
                     self.ax.set_ylim(y_min - margin, y_max + margin)
-                
+                    
                 # 高效更新画布
                 self.canvas.draw_idle()
                 self.canvas.flush_events()
