@@ -152,31 +152,38 @@ class SerialPlotter:
         refresh_btn = ttk.Button(toolbar_frame, text="刷新串口", command=self.refresh_ports)
         refresh_btn.pack(side='right', padx=5)
 
-        # 创建顶部容器框架
-        top_frame = ttk.Frame(main_frame)
-        top_frame.pack(fill='x', pady=5)
+        # 创建左右布局框架
+        content_frame = ttk.Frame(main_frame)
+        content_frame.pack(fill='both', expand=True)
+        
+        # 数据框区域（左侧）
+        data_frame = ttk.LabelFrame(content_frame, text=" 串口数据 ")
+        data_frame.pack(side='left', fill='both', expand=True)
+        
+        # 控制面板区域（右侧）
+        control_frame = ttk.Frame(content_frame)
+        control_frame.pack(side='right', fill='y', padx=(10,0))
         
         # 串口设置区域
-        port_frame = ttk.LabelFrame(top_frame, text=" 串口设置 ")
-        port_frame.pack(side='left', padx=(0,5))
+        port_frame = ttk.LabelFrame(control_frame, text=" 串口设置 ")
+        port_frame.pack(fill='x', pady=5)
+        
+        # 使用grid布局确保对齐
+        port_frame.grid_columnconfigure(1, weight=1)
         
         # 串口选择
-        ttk.Label(port_frame, text="串口:").grid(row=0, column=0, padx=5)
+        ttk.Label(port_frame, text="串口:").grid(row=0, column=0, sticky='e', padx=5)
         ports = [port.device for port in serial.tools.list_ports.comports()]
-        self.port_combo = ttk.Combobox(port_frame, textvariable=self.port_var, values=ports, width=20)
-        self.port_combo.grid(row=0, column=1, padx=5)
+        self.port_combo = ttk.Combobox(port_frame, textvariable=self.port_var, values=ports, width=15)
+        self.port_combo.grid(row=0, column=1, sticky='ew', padx=5)
         self.port_var.set(ports[0] if ports else "")
 
         # 波特率选择
-        ttk.Label(port_frame, text="波特率:").grid(row=0, column=2, padx=5)
+        ttk.Label(port_frame, text="波特率:").grid(row=1, column=0, sticky='e', padx=5)
         self.baud_combo = ttk.Combobox(port_frame, textvariable=self.baud_var, 
-                                     values=["9600", "19200", "38400", "57600", "115200"], width=10)
-        self.baud_combo.grid(row=0, column=3, padx=5)
+                                     values=["9600", "19200", "38400", "57600", "115200"], width=15)
+        self.baud_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
         self.baud_var.set("115200")
-        
-        # 数据框区域（放在配置区右侧）
-        data_frame = ttk.LabelFrame(top_frame, text=" 串口数据 ")
-        data_frame.pack(side='right', fill='both', expand=True)
         
         # 创建滚动条
         scrollbar = ttk.Scrollbar(data_frame)
