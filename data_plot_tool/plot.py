@@ -159,7 +159,7 @@ def main(filename, height, width):
 
 if __name__ == "__main__":
 
-    # 文件名 - 请修改为你的实际文件名
-    filename = 'finger.txt'
+    # 提示用户输入文件名
+    filename = input("请输入同一目录下的文件名: ")
     # 图表尺寸 - 请根据需要调整
-    main(filename, height = 8, width = 16)
+    main(filename, height = 6, width = 24)
