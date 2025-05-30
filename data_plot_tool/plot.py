@@ -6,10 +6,10 @@ import re
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
-def read_phase_data(filename):
+def read_phase_data(filename, variable_name):
     """
-    读取相位数据文件，自动检测编码
-    支持格式: Phase:-79.70°
+    读取数据文件，自动检测编码
+    支持格式: [变量名]:-79.70° 或 -79.70°
     """
     phases = []
     
@@ -25,10 +25,10 @@ def read_phase_data(filename):
                     if line:
                         # 使用正则表达式提取数值
                         patterns = [
-                            r'Phase:\s*(-?\d+\.?\d*)°?',  # Phase:-79.70°
-                            r'Phase:\s*(-?\d+\.?\d*)',    # Phase:-79.70
-                            r'(-?\d+\.?\d*)°',            # -79.70°
-                            r'(-?\d+\.?\d*)'              # -79.70
+                            rf'{variable_name}:\s*(-?\d+\.?\d*)°?',  # 变量名:-79.70°
+                            rf'{variable_name}:\s*(-?\d+\.?\d*)',    # 变量名:-79.70
+                            r'(-?\d+\.?\d*)°',                       # -79.70°
+                            r'(-?\d+\.?\d*)'                         # -79.70
                         ]
                         
                         for pattern in patterns:
@@ -125,19 +125,22 @@ def create_trend_plot(phases, filename, height, width):
 
 def main(filename, height, width):
     try:
-        # 读取相位数据
-        phases = read_phase_data(filename)
+        # 获取变量名
+        variable_name = input("请输入变量名(如Phase): ")
+        
+        # 读取数据
+        phases = read_phase_data(filename, variable_name)
         
         if not phases:
-            print("未找到有效的相位数据，请检查文件格式")
+            print(f"未找到有效的{variable_name}数据，请检查文件格式")
             print("支持的格式示例:")
-            print("  Phase:-79.70°")
-            print("  Phase:-79.70")
+            print(f"  {variable_name}:-79.70°")
+            print(f"  {variable_name}:-79.70")
             print("  -79.70°")
             print("  -79.70")
             return
             
-        print(f"成功读取 {len(phases)} 个相位数据点")
+        print(f"成功读取 {len(phases)} 个{variable_name}数据点")
         print(f"数据范围: {min(phases):.2f}° 到 {max(phases):.2f}°")
         print(f"平均值: {np.mean(phases):.2f}°, 标准差: {np.std(phases):.2f}°")
         
@@ -149,8 +152,9 @@ def main(filename, height, width):
                    facecolor='white', edgecolor='none')
         print("图表已保存")
         
-        # 显示图表
-        plt.show()
+        # 不显示图表，直接保存
+        plt.close()
+        print(f"图表已保存为: {filename}_plot.png")
         
     except FileNotFoundError:
         print(f"文件 '{filename}' 未找到，请检查文件路径")
